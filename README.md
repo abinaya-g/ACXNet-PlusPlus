@@ -1,223 +1,128 @@
 # ACXNet++
 
-## Attention-Augmented Hybrid Deep Learning Framework for Cross-Task Mental Workload Estimation from EEG
+Attention-augmented hybrid deep learning (Autoencoder → CNN → multi-head self-attention → XGBoost) for cross-subject mental workload estimation from 14-channel EEG on the STEW dataset.
 
-This repository contains the implementation and supplementary experimental results associated with the paper:
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/abinaya-g/ACXNet-PlusPlus/blob/main/ACXNet_plusplus_Colab.ipynb)
+[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**ACXNet++: An Attention Augmented Hybrid Deep Learning Framework for Cross Task Mental Workload Estimation from EEG Neural Manifolds**
+**Paper:** *ACXNet++: An Attention Augmented Hybrid Deep Learning Framework for Cross Task Mental Workload Estimation from EEG Neural Manifolds*, P. Sundaravadivel and G. Abinaya, *Discover Artificial Intelligence*.
 
-**Authors:** P. Sundaravadivel and G. Abinaya  
-**Affiliation:** Saveetha Engineering College, Chennai, Tamil Nadu, India
+## Abstract
 
----
+ACXNet++ extends ACXNet by inserting a lightweight 4-head self-attention layer between the CNN feature extractor and an XGBoost classifier, so CNN-derived feature tokens are re-weighted in a data-dependent way before classification. It is designed for cross-subject workload estimation without subject-specific calibration. It is evaluated on the public STEW dataset (No-Task vs SIMKAP multitasking) with a subject-grouped cross-validation protocol.
 
-## Overview
+## Highlights
 
-ACXNet++ extends the ACXNet framework by introducing a lightweight multi-head self-attention mechanism between the convolutional neural network (CNN) feature extractor and the XGBoost classifier.
+- Attention module between CNN and XGBoost (residual connection, layer norm, global average pooling).
+- Subject-independent evaluation: 5-fold Stratified Group CV, with subject ID as the group, so no subject appears in both train and test.
+- Ablations over handcrafted, autoencoder, CNN, CNN + attention, and fused configurations.
+- Fold-level results released as JSON; Colab notebook provided.
 
-The complete pipeline is:
+## Method overview
 
-**EEG preprocessing → Autoencoder → CNN → Multi-Head Self-Attention → Feature Fusion → XGBoost**
+```
+EEG preprocessing -> Autoencoder -> CNN -> Multi-Head Self-Attention -> Feature fusion -> XGBoost
+```
 
-The framework is designed for cross-subject mental workload estimation without subject-specific calibration.
+| Stage | Details |
+|-------|---------|
+| Preprocessing | FIR band-pass 1-40 Hz; channel-wise min-max to [0, 1]; 2 s windows, 1 s step (50% overlap); 256 samples × 14 channels |
+| Autoencoder | Flattened window 3584 → 512 → 256 → 128 (latent) |
+| CNN | Two 1-D conv blocks (BatchNorm, ReLU, max-pool) on the latent vector |
+| Attention | 4-head self-attention, residual + LayerNorm, global average pooling |
+| Classifier | XGBoost on the learned representation, with an optional handcrafted-feature branch |
 
-The self-attention module provides data-dependent weighting of CNN-derived representations before classification, allowing the model to emphasize potentially informative feature tokens.
+## Data
 
----
+- **Dataset:** STEW (Simultaneous Task EEG Workload), 14-channel Emotiv EPOC, 128 Hz.
+- **Conditions:** No-Task (rest) and SIMKAP (multitasking).
+- **Subjects:** 48 released; 45 used after the data-quality and workload-rating criteria described in the paper.
+- **Access:** not redistributed here. Download it from the original public source and follow its terms of use.
 
-## Dataset
+## Evaluation protocol
 
-Experiments were conducted using the publicly available **STEW (Simultaneous Task EEG Workload)** dataset.
+- 5-fold Stratified Group Cross-Validation, grouped by subject ID.
+- A further 15% of the training subjects is held out for validation and early stopping.
+- All metrics are computed across the five folds.
 
-The dataset contains 14-channel EEG recordings acquired using an Emotiv EPOC headset at 128 Hz. The study considers two conditions:
+## Results
 
-- **No-Task:** resting condition
-- **SIMKAP:** multitasking condition
+Full ACXNet++ model (CNN + attention + handcrafted features):
 
-The released dataset contains 48 subjects. After applying the data-quality and workload-rating criteria described in the paper, 45 subjects were used for the reported experiments.
+| Condition | Accuracy |
+|-----------|----------|
+| SIMKAP | 87.59% |
+| No-Task | 75.59% |
 
-### Dataset access
-
-The STEW dataset is **not redistributed in this repository**. Users should obtain the dataset from its original public source and comply with its applicable terms of use.
-
----
-
-## Methodology
-
-### EEG preprocessing
-
-The preprocessing pipeline includes:
-
-1. FIR band-pass filtering from 1–40 Hz
-2. Channel-wise min-max normalization to [0, 1]
-3. Segmentation into 2-second windows
-4. 1-second step size (50% overlap)
-
-Each window contains 256 samples from 14 EEG channels.
-
-### Autoencoder
-
-The autoencoder compresses each flattened EEG window from:
-
-`3584 → 512 → 256 → 128`
-
-The 128-dimensional latent representation is used by the CNN feature extractor.
-
-### CNN backbone
-
-The latent representation is processed using two 1-D convolutional blocks with batch normalization, ReLU activation, and max pooling.
-
-### Multi-Head Self-Attention
-
-ACXNet++ introduces a 4-head self-attention layer after the CNN feature extraction stage, followed by a residual connection, layer normalization, and global average pooling.
-
-### XGBoost classifier
-
-The final classification stage uses XGBoost on the learned CNN/attention representation, with an optional handcrafted-feature branch as described in the paper.
-
----
-
-## Evaluation Protocol
-
-To reduce subject leakage, the reported experiments use:
-
-**5-fold Stratified Group Cross-Validation**
-
-with subject ID as the grouping variable. Therefore, windows from the same subject are not simultaneously included in training and testing partitions.
-
-An additional 15% of the training subjects is used for validation and early stopping.
-
-All reported metrics are calculated across the five cross-validation folds.
-
----
-
-## Main Results
-
-The principal full-model results reported in the manuscript are:
-
-| Condition | ACXNet++ Accuracy |
-|---|---:|
-| SIMKAP | **87.59%** |
-| No-Task | **75.59%** |
-
-For the CNN-only versus CNN+Attention ablation on SIMKAP:
+Attention ablation (SIMKAP):
 
 | Configuration | Accuracy |
-|---|---:|
+|---------------|----------|
 | CNN | 80.73% |
-| CNN + Attention | **91.33%** |
+| CNN + Attention | 91.33% (AUC ≈ 0.937) |
 
-The CNN+Attention SIMKAP configuration achieved an AUC of approximately **0.937**.
+> The 91.33% figure is the CNN + Attention ablation configuration. It is **not** the full ACXNet++ result (87.59%). Please do not compare the two directly.
 
-The 91.33% result is an attention ablation result; it should not be confused with the 87.59% result of the full ACXNet++ configuration.
+Other ablation configurations (handcrafted, autoencoder latent, CNN + handcrafted) and per-fold metrics are in [`ACXNet_plusplus_full_results.json`](ACXNet_plusplus_full_results.json).
 
----
+**Statistics.** Paired Wilcoxon signed-rank tests were run across the five folds. With only five paired observations the smallest attainable two-sided p-value is 0.0625, so significance is interpreted together with confidence intervals and effect sizes (see the paper).
 
-## Ablation Studies
+## Repository structure
 
-The repository includes experimental results for the configurations evaluated in the manuscript, including:
+```
+.
+├── ACXNet_plusplus_Colab.ipynb          # main notebook: preprocessing, training, evaluation
+├── ACXNet_plusplus_full_results.json    # fold-level results for all configurations
+├── CITATION.cff
+├── requirements.txt
+├── LICENSE
+└── README.md
+```
 
-- Handcrafted features
-- Autoencoder latent features
-- CNN without attention
-- CNN with attention
-- CNN + handcrafted features
-- CNN + attention + handcrafted features (ACXNet++)
-
-Complete fold-level experimental results are provided in:
-
-`results/ACXNet_plusplus_full_results.json`
-
----
-
-## Statistical Analysis
-
-Paired Wilcoxon signed-rank tests were used for comparisons across the five cross-validation folds.
-
-Because only five paired observations are available, the smallest attainable two-sided Wilcoxon p-value is **0.0625**. Therefore, statistical significance is interpreted together with confidence intervals and effect sizes, as described in the manuscript.
-
----
-
-## Reproducibility
-
-The repository provides:
-
-- Experimental implementation
-- Google Colab notebook
-- Preprocessing pipeline
-- Model configuration
-- Subject-level cross-validation procedure
-- Hyperparameter configuration
-- Fold-level experimental results
-
-Main notebook:
-
-`ACXNet_plusplus_Colab.ipynb`
-
-The notebook requires the publicly available STEW dataset.
-
----
-
-## Software Environment
-
-The reported experiments used:
-
-- Python 3.12
-- PyTorch 2.12
-- XGBoost 3.3
-- scikit-learn 1.8
-- SciPy 1.17
-- NumPy
-- Pandas
-- Matplotlib
-- Seaborn
-- PyWavelets
-
-The reported experiments were executed using CPU-based computation.
-
-Install the required Python packages using:
+## Installation
 
 ```bash
+git clone https://github.com/abinaya-g/ACXNet-PlusPlus.git
+cd ACXNet-PlusPlus
 pip install -r requirements.txt
 ```
 
----
+## Usage
 
-## Data Availability
+1. Obtain the STEW dataset (see Data).
+2. Open `ACXNet_plusplus_Colab.ipynb` in Colab (badge above) or locally in Jupyter.
+3. Point the notebook at your copy of the dataset and run all cells.
 
-The EEG data used in this study are publicly available through the STEW (Simultaneous Task EEG Workload) dataset repository. The source code and supplementary experimental results supporting the findings of this study are available in this repository.
+## Reproducibility
 
-The EEG dataset itself is not redistributed here.
+- **Software used for the reported runs:** Python 3.12, PyTorch 2.12, XGBoost 3.3, scikit-learn 1.8, SciPy 1.17, NumPy, Pandas, Matplotlib, Seaborn, PyWavelets.
+- **Hardware:** CPU-only.
+- **Protocol:** subject-grouped 5-fold CV; hyperparameters and model configuration are in the notebook.
 
----
+## Limitations
+
+- Single dataset (STEW), 45 subjects, two conditions; no external validation on other datasets or headsets.
+- Five CV folds give limited statistical power (minimum p = 0.0625), so differences between configurations should be read with the reported confidence intervals.
+- Consumer-grade 14-channel EEG at 128 Hz.
+- The full model (87.59%) scores lower than the CNN + Attention ablation (91.33%) on SIMKAP; see the paper for the discussion of this.
 
 ## Citation
 
-If you use this implementation or the ACXNet++ methodology in your research, please cite:
-
-```text
-Sundaravadivel, P., & Abinaya, G.
-ACXNet++: An Attention Augmented Hybrid Deep Learning Framework
-for Cross Task Mental Workload Estimation from EEG Neural Manifolds.
-Discover Artificial Intelligence.
+```bibtex
+@article{sundaravadivel_acxnetpp,
+  title   = {ACXNet++: An Attention Augmented Hybrid Deep Learning Framework for Cross Task Mental Workload Estimation from EEG Neural Manifolds},
+  author  = {Sundaravadivel, P. and Abinaya, G.},
+  journal = {Discover Artificial Intelligence}
+}
 ```
 
-Please update the citation with the final volume, article number, DOI, and publication year after publication.
-
----
+Please update the citation with the volume, article number, DOI and year after publication.
 
 ## License
 
-The source code in this repository is released under the MIT License.
-
-See `LICENSE` for details.
-
----
+Code is released under the MIT License. See [LICENSE](LICENSE). The STEW dataset has its own terms.
 
 ## Contact
 
-**G. Abinaya**  
-Saveetha Engineering College  
-Chennai, Tamil Nadu, India
-
-Email: abinaya.jone@gmail.com
+G. Abinaya, Saveetha Engineering College, Chennai, Tamil Nadu, India. For questions or collaboration, please open a GitHub issue.
